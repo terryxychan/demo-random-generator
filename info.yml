@@ -1,0 +1,3 @@
+version: '<the version>'
+repository: '<Repository name>'
+port: '<Desired port>'

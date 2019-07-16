@@ -1,0 +1,37 @@
+---
+swagger: "2.0"
+info:
+  description: "This is a microservice that generates random numbers or a string"
+  version: "1.0.0"
+  title: "Random generator"
+  contact:
+    email: "YChan14@slb.com"
+host: "0.0.0.0"
+schemes:
+- "http"
+paths:
+  /number:
+    get:
+      summary: "Returns a random number"
+      responses:
+        200:
+          description: "Successfully generated"
+          schema:
+            type: "number"
+        404:
+          description: "Can't generate"
+          schema:
+            title: "Can't be calculated"
+  /string:
+    get:
+      summary: "Returns a string"
+      responses:
+        200:
+          description: "Successfully generated"
+          schema:
+            type: "number"
+        404:
+          description: "Can't generate"
+          schema:
+            title: "Can't be calculated"
+definitions: {}

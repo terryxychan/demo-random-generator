@@ -1,0 +1,10 @@
+#
+####### example-requirements.txt #######
+#
+###### Requirements without Version Specifiers ######
+nosexcover
+coverage
+nose
+nose-watch
+connexion
+###### Requirements with Version Specifiers ######

@@ -1,0 +1,77 @@
+#!/usr/bin/env groovy
+pipeline {
+	agent any
+	parameters {
+	    string(name: 'OUTLOOK_URL', defaultValue: 'https://outlook.office.com/webhook/d1346363-4d2a-4f6b-97e6-131c709fa6ce@41ff26dc-250f-4b13-8981-739be8610c21/JenkinsCI/e04a4f49181b49358fec297487197f70/d1346363-4d2a-4f6b-97e6-131c709fa6ce', description: 'This is the URL of the Outlook Webhook')
+	}
+	environment {
+		REPO = "template-python"
+		PORT_NUMBER = "5000"
+		API_TEST_NAME = "api-test"
+		VERSION = "0.0.0"
+		REGISTRY_ADDR = "localhost:5000"
+	}
+	options {
+	    timeout(time: 10, unit: 'MINUTES')
+	    office365ConnectorWebhooks([
+	        [name: "Outlook", notifyBackToNormal: false, notifyFailure: false, notifyRepeatedFailure: false, notifySuccess: false, url:"${params.OUTLOOK_URL}"]
+      ])
+	}
+
+	stages {
+	    stage("Clean initial environment"){
+			steps {
+                sh "docker container prune -f"
+                sh "docker image prune -f"
+            }
+		}
+		stage("Get the environment variables"){
+			steps {
+				script {
+					// This reads the information from the information yaml file
+					def info = readYaml file:"info.yml"
+					VERSION = info.version
+					REPO = info.repository
+					PORT_NUMBER = info.port
+				}
+			}
+		}
+	    stage("Pull dev dockerfile"){
+			steps {
+				sh "docker pull ${REGISTRY_ADDR}/${REPO}:dev"
+			}
+        }
+		stage("Tag dockerfile"){
+			steps {
+				sh "docker tag ${REGISTRY_ADDR}/${REPO}:dev ${REGISTRY_ADDR}/${REPO}:${VERSION}"
+				sh "docker tag ${REGISTRY_ADDR}/${REPO}:dev ${REGISTRY_ADDR}/${REPO}:latest"
+			}
+        }
+        stage("Push dockerfile"){
+			steps {
+				sh "docker push ${REGISTRY_ADDR}/${REPO}:${VERSION}"
+				sh "docker push ${REGISTRY_ADDR}/${REPO}:latest"
+			}
+		}
+
+	    stage('Clean environment') {
+		    steps {
+		        sh "docker container prune"
+		        sh "docker rmi -f ${REGISTRY_ADDR}/${REPO}:${VERSION}"
+		        sh "docker rmi -f ${REGISTRY_ADDR}/${REPO}:latest"
+		        sh "docker rmi -f ${REGISTRY_ADDR}/${REPO}:dev"
+		        sh "docker rmi -f ${REPO}"
+		        sh "docker image prune -f"
+		        echo "Finished cleaning the image"
+		    }
+	    }
+	}
+	post {
+        success {
+            office365ConnectorSend status: "SUCCESS", message:"SUCCESS: To see more details: (<http://${SERVER_URL}:${SERVER_PORT}/job/${JOB_NAME}/${BUILD_NUMBER}/>)", webhookUrl:"${params.OUTLOOK_URL}"
+        }
+        failure {
+            office365ConnectorSend status: "FAILED", message:"FAILED: To see more details: (<http://${SERVER_URL}:${SERVER_PORT}/job/${JOB_NAME}/${BUILD_NUMBER}/>)", webhookUrl:"${params.OUTLOOK_URL}"
+        }
+    }
+}

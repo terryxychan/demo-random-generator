@@ -1,0 +1,101 @@
+#!/usr/bin/env groovy
+pipeline {
+	agent any
+	parameters {
+	    string(name: 'OUTLOOK_URL', defaultValue: 'https://outlook.office.com/webhook/d1346363-4d2a-4f6b-97e6-131c709fa6ce@41ff26dc-250f-4b13-8981-739be8610c21/JenkinsCI/e04a4f49181b49358fec297487197f70/d1346363-4d2a-4f6b-97e6-131c709fa6ce', description: 'This is the URL of the Outlook Webhook')
+	}
+	environment {
+		REPO = "template-python"
+		PORT_NUMBER = "5000"
+		API_TEST_NAME = "api-test"
+		VERSION = "0.0.0"
+	}
+
+    options {
+        office365ConnectorWebhooks([
+	        [name: "Outlook", notifyBackToNormal: false, notifyFailure: false, notifyRepeatedFailure: false, notifySuccess: false, url:"${params.OUTLOOK_URL}"]
+        ])
+    }
+
+	stages {
+	    stage("Clean initial environment"){
+			steps {
+                sh "docker container prune -f"
+                sh "docker image prune -f"
+            }
+		}
+		stage("Get the environment variables"){
+			steps {
+				script {
+					// This reads the information from the information yaml file
+					def info = readYaml file:"info.yml"
+					VERSION = info.version
+					REPO = info.repository
+					PORT_NUMBER = info.port
+				}
+			}
+		}
+		// stage("Echoing the variables"){
+		// 	steps {
+		// 		echo "${VERSION}"
+		// 		echo "${REPO}"
+		// 		echo "${PORT_NUMBER}"
+		// 		echo "${OUTLOOK_URL}"
+		// 	}
+		// }
+		stage("Build and run micro-service"){
+			steps {
+			    // Build the micro-service image
+				sh "docker build -t ${REPO}:${BRANCH_NAME} ."
+				// Run the micro-service
+				sh "docker run -d -p ${PORT_NUMBER}:8080 --name ${REPO}_${BRANCH_NAME} ${REPO}:${BRANCH_NAME}"
+				// Copy the unit testing result to the Jenkins workspace
+				sh "docker cp ${REPO}_${BRANCH_NAME}:/usr/src/app/tests_unit/nosetests.xml ./tests_unit"
+
+			}
+		 }
+
+		stage("Run API functional test"){
+		    steps {
+		        // Build the API test image
+				sh "docker build -t ${API_TEST_NAME}:${REPO}_${BRANCH_NAME} -f Dockerfile.api ."
+				// Run the API test
+				sh "docker run --name ${API_TEST_NAME}_${REPO}_${BRANCH_NAME} ${API_TEST_NAME}:${REPO}_${BRANCH_NAME}"
+				// Copy the API test result to Jenkins workspace
+				sh "docker cp ${API_TEST_NAME}_${REPO}_${BRANCH_NAME}:/usr/src/app/tests_api/nosetests.xml ./tests_api"
+		    }
+		}
+		stage("Clean up"){
+		    steps {
+		        // Stop Micro-service container
+		        sh "docker stop ${REPO}_${BRANCH_NAME}"
+		        // Delete micro-service and API test service cintainer
+		        sh "docker container prune -f"
+		        // Delete API test image
+		        sh "docker rmi -f ${API_TEST_NAME}:${REPO}_${BRANCH_NAME}"
+		        // Delete micro-service image
+		        sh "docker rmi -f ${REPO}:${BRANCH_NAME}"
+		    }
+		}
+	}
+	post {
+        always {
+        //  Saving Artifacts locally
+            junit (testResults:'**/*.xml')
+            deleteDir()
+        }
+        success {
+            office365ConnectorSend status: "SUCCESS", message:"SUCCESS: To see more details: (<http://${SERVER_URL}:${SERVER_PORT}/job/${REPO}-features/job/${BRANCH_NAME}/${BUILD_NUMBER}/>)", webhookUrl:"${params.OUTLOOK_URL}"
+        }
+        failure {
+            office365ConnectorSend status: "FAILED", message:"FAILED: To see more details: (<http://${SERVER_URL}:${SERVER_PORT}/job/${REPO}-features/job/${BRANCH_NAME}/${BUILD_NUMBER}/>)", webhookUrl:"${params.OUTLOOK_URL}"
+            // Stop micro-service
+            sh "docker stop ${REPO}_${BRANCH_NAME}"
+            // Delete micro-service and API test container
+            sh "docker container prune -f"
+            // Delete micro-service and API test images
+            sh "docker rmi -f ${REPO}:${BRANCH_NAME}"
+            sh "docker rmi -f ${API_TEST_NAME}:${REPO}_${BRANCH_NAME}"
+        }
+    }
+}

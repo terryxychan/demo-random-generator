@@ -1,0 +1,22 @@
+FROM terryxychan/ubuntu-python:latest
+MAINTAINER Terry Chan "YChan14@slb.com"
+
+## ---------------------------------------------------------
+## Copying everything in this container
+## ---------------------------------------------------------
+RUN mkdir -p /usr/src/app
+COPY . /usr/src/app
+WORKDIR /usr/src/app/tests_api
+
+## ---------------------------------------------------------
+## Give permission to .sh files
+## ---------------------------------------------------------
+RUN chmod +x ./setup.sh
+RUN chmod +x ./run.sh
+
+## ---------------------------------------------------------
+## Run setup
+## ---------------------------------------------------------
+RUN ["./setup.sh"]
+CMD ["./run.sh"]
+
